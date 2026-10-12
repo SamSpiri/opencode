@@ -1,7 +1,17 @@
 export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
-import { LLMClient, Message, type AIError } from "@opencode/ai/effect"
+import {
+  AssistantMessage,
+  CacheHint,
+  LLMClient,
+  Message,
+  SystemMessage,
+  ToolMessage,
+  UserMessage,
+  type AIError,
+  type ContentPart,
+} from "@opencode/ai/effect"
 import { Effect } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
@@ -53,6 +63,15 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       initial: history.initial,
       messages: history.messages,
     })
+    const markedMessages =
+      transcript.messages.length > 0
+        ? [
+            ...markHistoryBoundary(transcript.messages),
+            ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
+          ]
+        : history.instructionUpdate
+          ? markHistoryBoundary([Message.system(history.instructionUpdate)])
+          : []
     const prepared = yield* context.request.generate({
       session: selection.session,
       agent: selection.agent.id,
@@ -60,8 +79,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       tools: selection.tools,
       system: transcript.system,
       messages: [
-        ...transcript.messages,
-        ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
+        ...markedMessages,
         Message.user(input.prompt),
       ],
     })
@@ -71,8 +89,37 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       modelID: model.ref.id,
     })
     const response = yield* llm.generate(prepared.request, prepared.options).pipe(ModelRetry.retry)
+    yield* Effect.logInfo("session generation usage diagnostic", {
+      sessionID: input.session.id,
+      usage: response.usage,
+    })
     const usage = SessionUsage.record(response.usage, model.cost)
     yield* bus.publish(SessionEvent.UsageRecorded, { sessionID: selection.session.id, source: "generate", ...usage })
     return { text: response.text, ...usage }
   }).pipe(instances.provide(input.session))
 })
+
+function markHistoryBoundary(messages: Array<Message>): Array<Message> {
+  const last = messages.at(-1)
+  if (!last || last.content.length === 0) return messages
+  const lastText = last.content.findLastIndex((part) => part.type === "text")
+  const index = lastText >= 0 ? lastText : last.content.findLastIndex((part) => part.type !== "compaction" && part.type !== "effort")
+  const part = last.content[index]
+  if (!part || ("cache" in part && part.cache)) return messages
+  const next = (() => {
+    switch (last.role) {
+      case "assistant":
+        return new AssistantMessage({ ...last, content: markContent(last.content, index) })
+      case "system":
+        return new SystemMessage({ ...last, content: markContent(last.content, index) })
+      case "tool":
+        return new ToolMessage({ ...last, content: markContent(last.content, index) })
+      case "user":
+        return new UserMessage({ ...last, content: markContent(last.content, index) })
+    }
+  })()
+  return [...messages.slice(0, -1), next]
+}
+
+const markContent = <Part extends ContentPart>(content: ReadonlyArray<Part>, index: number) =>
+  content.map((part, i) => (i === index ? { ...part, cache: new CacheHint({ type: "ephemeral" }) } : part))
