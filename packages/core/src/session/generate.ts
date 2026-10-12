@@ -49,10 +49,15 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       initial: history.initial,
       messages: history.messages,
     })
-    const historyMessages = [
-      ...transcript.messages,
-      ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
-    ]
+    const markedMessages =
+      transcript.messages.length > 0
+        ? [
+            ...markHistoryBoundary(transcript.messages),
+            ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
+          ]
+        : history.instructionUpdate
+          ? markHistoryBoundary([Message.system(history.instructionUpdate)])
+          : []
     const prepared = yield* context.request.generate({
       session: selection.session,
       agent: selection.agent.id,
@@ -60,7 +65,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       tools: selection.tools,
       system: transcript.system,
       messages: [
-        ...markHistoryBoundary(historyMessages),
+        ...markedMessages,
         Message.user(input.prompt),
       ],
     })

@@ -350,6 +350,10 @@ it.effect(
         ),
       ).toEqual(["Settled partial answer"])
       expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Lookup" }])
+      const assistantPart = requests[0]?.messages.find((m) => m.role === "assistant")?.content[0]
+      expect(assistantPart && "cache" in assistantPart ? assistantPart.cache : undefined).toMatchObject({
+        type: "ephemeral",
+      })
       expect(requests[0]?.toolChoice).toBeUndefined()
       expect(options[0]?.webSocket).toBeUndefined()
       expect(yield* durableState(db, sessionID)).toEqual(before)
