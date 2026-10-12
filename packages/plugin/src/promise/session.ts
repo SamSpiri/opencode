@@ -155,6 +155,7 @@ export type SessionDomain = Pick<
   | "create"
   | "get"
   | "remove"
+  | "fork"
   | "switchAgent"
   | "switchModel"
   | "prompt"
