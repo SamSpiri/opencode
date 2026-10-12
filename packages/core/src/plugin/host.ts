@@ -585,6 +585,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
         }),
       get: (input) => sessions.get(input.sessionID),
       remove: (input) => sessions.remove(input.sessionID),
+      fork: sessions.fork,
       switchAgent: sessions.switchAgent,
       switchModel: sessions.switchModel,
       prompt: sessions.prompt,
