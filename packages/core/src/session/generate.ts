@@ -1,7 +1,7 @@
 export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
-import { LLMClient, Message, type AIError } from "@opencode/ai"
+import { CacheHint, LLMClient, Message, type AIError, type ContentPart } from "@opencode/ai"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
@@ -49,6 +49,10 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       initial: history.initial,
       messages: history.messages,
     })
+    const historyMessages = [
+      ...transcript.messages,
+      ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
+    ]
     const prepared = yield* context.request.generate({
       session: selection.session,
       agent: selection.agent.id,
@@ -56,8 +60,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       tools: selection.tools,
       system: transcript.system,
       messages: [
-        ...transcript.messages,
-        ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
+        ...markHistoryBoundary(historyMessages),
         Message.user(input.prompt),
       ],
     })
@@ -71,3 +74,15 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     return response.text
   }).pipe(instances.provide(input.session))
 })
+
+function markHistoryBoundary(messages: Array<Message>): Array<Message> {
+  const last = messages.at(-1)
+  if (!last || last.content.length === 0) return messages
+  const lastText = last.content.findLastIndex((p) => p.type === "text")
+  const index = lastText >= 0 ? lastText : last.content.length - 1
+  const part = last.content[index]
+  if (!part || ("cache" in part && part.cache)) return messages
+  const marked = { ...part, cache: new CacheHint({ type: "ephemeral" }) } as ContentPart
+  const content = last.content.map((p, i) => (i === index ? marked : p))
+  return [...messages.slice(0, -1), new Message({ ...last, content })]
+}
