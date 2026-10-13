@@ -2,6 +2,10 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 
 export type OpenAIResponsesInput = Array<OpenAIResponsesInputItem>
 
+export type OpenAIResponsesPromptCacheBreakpoint = {
+  mode: "explicit"
+}
+
 export type OpenAIResponsesInputItem =
   | OpenAIResponsesSystemMessage
   | OpenAIResponsesUserMessage
@@ -32,12 +36,17 @@ export type OpenAIResponsesSystemMessage = {
 export type OpenAIResponsesUserMessage = {
   role: "user"
   content: Array<
-    | { type: "input_text"; text: string }
-    | { type: "input_image"; image_url: string }
-    | { type: "input_image"; file_id: string }
-    | { type: "input_file"; file_url: string }
-    | { type: "input_file"; filename: string; file_data: string }
-    | { type: "input_file"; file_id: string }
+    | { type: "input_text"; text: string; prompt_cache_breakpoint?: OpenAIResponsesPromptCacheBreakpoint }
+    | { type: "input_image"; image_url: string; prompt_cache_breakpoint?: OpenAIResponsesPromptCacheBreakpoint }
+    | { type: "input_image"; file_id: string; prompt_cache_breakpoint?: OpenAIResponsesPromptCacheBreakpoint }
+    | { type: "input_file"; file_url: string; prompt_cache_breakpoint?: OpenAIResponsesPromptCacheBreakpoint }
+    | {
+        type: "input_file"
+        filename: string
+        file_data: string
+        prompt_cache_breakpoint?: OpenAIResponsesPromptCacheBreakpoint
+      }
+    | { type: "input_file"; file_id: string; prompt_cache_breakpoint?: OpenAIResponsesPromptCacheBreakpoint }
   >
 }
 
@@ -58,7 +67,9 @@ export type OpenAIResponsesFunctionCall = {
 export type OpenAIResponsesFunctionCallOutput = {
   type: "function_call_output"
   call_id: string
-  output: string
+  output:
+    | string
+    | Array<{ type: "input_text"; text: string; prompt_cache_breakpoint?: OpenAIResponsesPromptCacheBreakpoint }>
 }
 
 export type OpenAIResponsesComputerCall = {

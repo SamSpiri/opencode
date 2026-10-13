@@ -2,6 +2,7 @@ import { APICallError } from "@ai-sdk/provider"
 import type { LanguageModelV3, LanguageModelV3StreamPart } from "@ai-sdk/provider"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { AISDK } from "@opencode/core/aisdk"
+import { OpenAIResponsesLanguageModel } from "@opencode/core/github-copilot/responses/openai-responses-language-model"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Model } from "@opencode/core/model"
@@ -10,6 +11,7 @@ import {
   Media,
   LLM,
   AIError,
+  CacheHint,
   CompactionPart,
   ProviderID,
   HttpContext,
@@ -260,6 +262,134 @@ it.effect("lowers chronological system updates to wrapped user messages", () =>
       },
       { role: "assistant", content: [{ type: "text", text: "After." }] },
     ])
+  }),
+)
+
+it.effect("routes the Copilot cache boundary to the nearest eligible input block", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/github-copilot"),
+      modelID: Model.ID.make("gpt-6-luna"),
+    })
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.user("Stable history"),
+          Message.assistant([{ type: "text", text: "Settled answer", cache: new CacheHint({ type: "ephemeral" }) }]),
+          Message.user("Changing question"),
+        ],
+      }),
+    )
+
+    expect(prepared.body.prompt).toEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Stable history",
+            providerOptions: { copilot: { promptCacheBreakpoint: { mode: "explicit" } } },
+          },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: "Settled answer", providerOptions: undefined }] },
+      { role: "user", content: [{ type: "text", text: "Changing question" }] },
+    ])
+
+    const other = yield* aisdk.model({
+      ...model("@ai-sdk/openai"),
+      modelID: Model.ID.make("gpt-6-luna"),
+    })
+    const otherPrepared = yield* compileRequest(
+      LLM.request({
+        model: other,
+        messages: [
+          Message.user([{ type: "text", text: "Stable history", cache: new CacheHint({ type: "ephemeral" }) }]),
+        ],
+      }),
+    )
+    expect(otherPrepared.body.prompt).toEqual([{ role: "user", content: [{ type: "text", text: "Stable history" }] }])
+
+    const older = yield* aisdk.model({
+      ...model("@ai-sdk/github-copilot"),
+      modelID: Model.ID.make("gpt-5.5"),
+    })
+    const olderPrepared = yield* compileRequest(
+      LLM.request({
+        model: older,
+        messages: [
+          Message.user([{ type: "text", text: "Stable history", cache: new CacheHint({ type: "ephemeral" }) }]),
+        ],
+      }),
+    )
+    expect(olderPrepared.body.prompt).toEqual([{ role: "user", content: [{ type: "text", text: "Stable history" }] }])
+  }),
+)
+
+it.effect("composes a tool-result boundary through the Copilot wire lowering", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+    })
+    const resolved = yield* aisdk.model({
+      ...model("@ai-sdk/github-copilot"),
+      modelID: Model.ID.make("gpt-6-luna"),
+    })
+    const boundary = new CacheHint({ type: "ephemeral" })
+    const first = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.tool({ id: "call_1", name: "lookup", result: "Stable tool result", cache: boundary }),
+          Message.user("CHECK1"),
+        ],
+      }),
+    )
+    const second = yield* compileRequest(
+      LLM.request({
+        model: resolved,
+        messages: [
+          Message.tool({ id: "call_1", name: "lookup", result: "Stable tool result" }),
+          Message.user([{ type: "text", text: "CHECK2", cache: boundary }]),
+        ],
+      }),
+    )
+    const bodies: Array<Record<string, unknown>> = []
+    const language = new OpenAIResponsesLanguageModel("gpt-6-luna", {
+      provider: "copilot",
+      url: () => "https://api.test.com/responses",
+      headers: () => ({}),
+      fetch: (async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        bodies.push(JSON.parse(init?.body as string))
+        return new Response(
+          JSON.stringify({
+            id: "resp_1",
+            created_at: 0,
+            model: "gpt-6-luna",
+            output: [],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        )
+      }) as any,
+    })
+    yield* Effect.promise(() => language.doGenerate({ prompt: first.body.prompt } as any))
+    yield* Effect.promise(() => language.doGenerate({ prompt: second.body.prompt } as any))
+
+    const firstOutput = (bodies[0]?.input as any)?.[0]?.output
+    const secondOutput = (bodies[1]?.input as any)?.[0]?.output
+    expect(Array.isArray(firstOutput)).toBe(true)
+    expect(Array.isArray(secondOutput)).toBe(true)
+    expect(firstOutput[0].prompt_cache_breakpoint).toEqual({ mode: "explicit" })
+    expect(secondOutput[0]).not.toHaveProperty("prompt_cache_breakpoint")
+    expect(firstOutput[0].text).toBe(secondOutput[0].text)
   }),
 )
 
@@ -561,11 +691,19 @@ it.effect("normalizes file data across AI SDK prompt parts", () =>
           Message.user([
             { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
             { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
-            { type: "media", media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"), filename: "inline.png" },
+            {
+              type: "media",
+              media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"),
+              filename: "inline.png",
+            },
             { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
             { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
           ]),
-          Message.assistant({ type: "media", media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }), filename: "document.pdf" }),
+          Message.assistant({
+            type: "media",
+            media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }),
+            filename: "document.pdf",
+          }),
           Message.tool({
             id: "call_1",
             name: "screenshot",
@@ -748,12 +886,7 @@ it.effect("routes AI SDK requests and responses through HTTP hook middleware", (
     expect(sent[0]?.headers.get("x-hook")).toBe("applied")
     expect(sent[0]?.headers.get("authorization")).toBe("Bearer test")
     expect(JSON.parse(sent[0]?.body ?? "")).toMatchObject({ model: "api-model" })
-    expect(seen).toEqual([
-      "POST https://example.test/v1/chat/completions",
-      sent[0]?.body,
-      sent[0]?.body,
-      "status 200",
-    ])
+    expect(seen).toEqual(["POST https://example.test/v1/chat/completions", sent[0]?.body, sent[0]?.body, "status 200"])
     expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["rewritten"])
   }),
 )

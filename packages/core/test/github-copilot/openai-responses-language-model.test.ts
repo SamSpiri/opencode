@@ -208,8 +208,8 @@ function createStreamFetch(events: ReadonlyArray<Record<string, unknown>>) {
   )
 }
 
-function createModel(fetchFn: ReturnType<typeof mock>) {
-  return new OpenAIResponsesLanguageModel("test-model", {
+function createModel(fetchFn: ReturnType<typeof mock>, modelId = "test-model") {
+  return new OpenAIResponsesLanguageModel(modelId, {
     provider: "copilot",
     url: () => "https://api.test.com/responses",
     headers: () => ({ Authorization: "Bearer test-token" }),
@@ -444,6 +444,94 @@ describe("doGenerate", () => {
     expect(requests[1]?.include).toEqual(["reasoning.encrypted_content"])
     expect(requests[2]?.store).toBe(true)
     expect(requests[2]?.include).toEqual(["reasoning.encrypted_content"])
+  })
+
+  test("honors an explicit cache breakpoint supplied by the Copilot lowering", async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const fetchFn = mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      requests.push(JSON.parse(init?.body as string))
+      return new Response(
+        JSON.stringify({
+          id: "resp_1",
+          created_at: 0,
+          model: "gpt-6-luna",
+          output: [],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    })
+    const prompt = [
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "text" as const,
+            text: "Stable history",
+            providerOptions: { copilot: { promptCacheBreakpoint: { mode: "explicit" } } },
+          },
+        ],
+      },
+      { role: "user" as const, content: [{ type: "text" as const, text: "Changing question" }] },
+    ]
+
+    await createModel(fetchFn, "gpt-6-luna").doGenerate({ prompt } as any)
+    await createModel(fetchFn, "gpt-6-luna").doGenerate({ prompt: TEST_PROMPT } as any)
+
+    expect((requests[0]?.input as any)?.[0]?.content?.[0]?.prompt_cache_breakpoint).toEqual({ mode: "explicit" })
+    expect(requests[1]).not.toHaveProperty("prompt_cache_options")
+    expect((requests[1]?.input as any)?.[0]?.content?.[0]).not.toHaveProperty("prompt_cache_breakpoint")
+  })
+
+  test("keeps marked tool-result output array-shaped across growing requests", async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const fetchFn = mock(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      requests.push(JSON.parse(init?.body as string))
+      return new Response(
+        JSON.stringify({
+          id: "resp_1",
+          created_at: 0,
+          model: "gpt-6-luna",
+          output: [],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      )
+    })
+    const tool = (marked: boolean) => ({
+      role: "tool" as const,
+      content: [
+        {
+          type: "tool-result" as const,
+          toolCallId: "call_1",
+          toolName: "lookup",
+          output: { type: "text" as const, value: "Stable tool result" },
+          ...(marked ? { providerOptions: { copilot: { promptCacheBreakpoint: { mode: "explicit" } } } } : {}),
+        },
+      ],
+    })
+    const question = (text: string, marked: boolean) => ({
+      role: "user" as const,
+      content: [
+        {
+          type: "text" as const,
+          text,
+          ...(marked ? { providerOptions: { copilot: { promptCacheBreakpoint: { mode: "explicit" } } } } : {}),
+        },
+      ],
+    })
+
+    const model = createModel(fetchFn, "gpt-6-luna")
+    await model.doGenerate({ prompt: [tool(true), question("CHECK1", false)] } as any)
+    await model.doGenerate({ prompt: [tool(false), question("CHECK2", true)] } as any)
+
+    const firstOutput = (requests[0]?.input as any)?.[0]?.output
+    const secondOutput = (requests[1]?.input as any)?.[0]?.output
+    expect(Array.isArray(firstOutput)).toBe(true)
+    expect(Array.isArray(secondOutput)).toBe(true)
+    expect(firstOutput[0].prompt_cache_breakpoint).toEqual({ mode: "explicit" })
+    expect(secondOutput[0]).not.toHaveProperty("prompt_cache_breakpoint")
+    expect(firstOutput[0].text).toBe(secondOutput[0].text)
   })
 })
 

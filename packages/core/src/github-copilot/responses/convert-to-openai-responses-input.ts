@@ -1,7 +1,11 @@
 import { type LanguageModelV3Prompt, type SharedV3Warning, UnsupportedFunctionalityError } from "@ai-sdk/provider"
 import { convertToBase64, parseProviderOptions } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { OpenAIResponsesInput, OpenAIResponsesReasoning } from "./openai-responses-api-types.js"
+import type {
+  OpenAIResponsesInput,
+  OpenAIResponsesPromptCacheBreakpoint,
+  OpenAIResponsesReasoning,
+} from "./openai-responses-api-types.js"
 
 /**
  * Check if a string is a file ID based on the given prefixes
@@ -29,6 +33,10 @@ export async function convertToOpenAIResponsesInput({
   const input: OpenAIResponsesInput = []
   const warnings: Array<SharedV3Warning> = []
   const processedApprovalIds = new Set<string>()
+  const hasBoundary = prompt.some(
+    ({ content }) =>
+      Array.isArray(content) && content.some((part) => promptCacheBreakpoint(part.providerOptions) !== undefined),
+  )
 
   for (const { role, content } of prompt) {
     switch (role) {
@@ -63,39 +71,48 @@ export async function convertToOpenAIResponsesInput({
           content: content.map((part, index) => {
             switch (part.type) {
               case "text": {
-                return { type: "input_text", text: part.text }
+                return markBreakpoint({ type: "input_text", text: part.text }, part.providerOptions)
               }
               case "file": {
                 if (part.mediaType.startsWith("image/")) {
                   const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
 
-                  return {
-                    type: "input_image",
-                    ...(part.data instanceof URL
-                      ? { image_url: part.data.toString() }
-                      : typeof part.data === "string" && isFileId(part.data, fileIdPrefixes)
-                        ? { file_id: part.data }
-                        : {
-                            image_url: `data:${mediaType};base64,${convertToBase64(part.data)}`,
-                          }),
-                    detail: part.providerOptions?.copilot?.imageDetail,
-                  }
+                  return markBreakpoint(
+                    {
+                      type: "input_image",
+                      ...(part.data instanceof URL
+                        ? { image_url: part.data.toString() }
+                        : typeof part.data === "string" && isFileId(part.data, fileIdPrefixes)
+                          ? { file_id: part.data }
+                          : {
+                              image_url: `data:${mediaType};base64,${convertToBase64(part.data)}`,
+                            }),
+                      detail: part.providerOptions?.copilot?.imageDetail,
+                    },
+                    part.providerOptions,
+                  )
                 } else if (part.mediaType === "application/pdf") {
                   if (part.data instanceof URL) {
-                    return {
+                    return markBreakpoint(
+                      {
+                        type: "input_file",
+                        file_url: part.data.toString(),
+                      },
+                      part.providerOptions,
+                    )
+                  }
+                  return markBreakpoint(
+                    {
                       type: "input_file",
-                      file_url: part.data.toString(),
-                    }
-                  }
-                  return {
-                    type: "input_file",
-                    ...(typeof part.data === "string" && isFileId(part.data, fileIdPrefixes)
-                      ? { file_id: part.data }
-                      : {
-                          filename: part.filename ?? `part-${index}.pdf`,
-                          file_data: `data:application/pdf;base64,${convertToBase64(part.data)}`,
-                        }),
-                  }
+                      ...(typeof part.data === "string" && isFileId(part.data, fileIdPrefixes)
+                        ? { file_id: part.data }
+                        : {
+                            filename: part.filename ?? `part-${index}.pdf`,
+                            file_data: `data:application/pdf;base64,${convertToBase64(part.data)}`,
+                          }),
+                    },
+                    part.providerOptions,
+                  )
                 } else {
                   throw new UnsupportedFunctionalityError({
                     functionality: `file part media type ${part.mediaType}`,
@@ -250,7 +267,17 @@ export async function convertToOpenAIResponsesInput({
           input.push({
             type: "function_call_output",
             call_id: part.toolCallId,
-            output: contentValue,
+            output: hasBoundary
+              ? [
+                  {
+                    type: "input_text",
+                    text: contentValue,
+                    ...(promptCacheBreakpoint(part.providerOptions) === undefined
+                      ? {}
+                      : { prompt_cache_breakpoint: promptCacheBreakpoint(part.providerOptions) }),
+                  },
+                ]
+              : contentValue,
           })
         }
 
@@ -265,6 +292,20 @@ export async function convertToOpenAIResponsesInput({
   }
 
   return { input, warnings }
+}
+
+function promptCacheBreakpoint(providerOptions: unknown): OpenAIResponsesPromptCacheBreakpoint | undefined {
+  if (!providerOptions || typeof providerOptions !== "object") return undefined
+  const copilot = (providerOptions as { copilot?: unknown }).copilot
+  if (!copilot || typeof copilot !== "object") return undefined
+  const breakpoint = (copilot as { promptCacheBreakpoint?: unknown }).promptCacheBreakpoint
+  if (!breakpoint || typeof breakpoint !== "object") return undefined
+  return (breakpoint as { mode?: unknown }).mode === "explicit" ? { mode: "explicit" } : undefined
+}
+
+function markBreakpoint<T extends object>(value: T, providerOptions: unknown) {
+  const breakpoint = promptCacheBreakpoint(providerOptions)
+  return breakpoint === undefined ? value : { ...value, prompt_cache_breakpoint: breakpoint }
 }
 
 const openaiResponsesReasoningProviderOptionsSchema = z.object({
