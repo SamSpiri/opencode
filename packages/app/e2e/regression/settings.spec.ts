@@ -862,6 +862,22 @@ test("the tab layout preference switches to vertical tabs and survives reload", 
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 })
 
+test("the static activity indicators preference survives reload", async ({ page }) => {
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+
+  const setting = settings.locator('[data-action="settings-static-activity-indicators"]')
+  const toggle = setting.getByRole("switch")
+  await expect(toggle).not.toBeChecked()
+  await setting.locator('[data-slot="switch-control"]').click()
+  await expect(toggle).toBeChecked()
+  await expect(page.locator("html")).toHaveAttribute("data-static-activity-indicators", "")
+
+  await page.reload()
+  await expect(toggle).toBeChecked()
+  await expect(page.locator("html")).toHaveAttribute("data-static-activity-indicators", "")
+})
+
 for (const viewport of [
   { name: "desktop", width: 1280, height: 720, bottom: false },
   { name: "mobile", width: 390, height: 844, bottom: true },

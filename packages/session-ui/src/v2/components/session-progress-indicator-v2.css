@@ -9,6 +9,10 @@
   image-rendering: crisp-edges;
 }
 
+[data-component="session-progress-indicator-v2"] [data-static-content] {
+  display: none;
+}
+
 [data-component="session-progress-indicator-v2"] [data-reduced-motion] {
   display: none;
   fill: currentColor;
@@ -22,4 +26,16 @@
   [data-component="session-progress-indicator-v2"] [data-reduced-motion] {
     display: block;
   }
+}
+
+:root[data-static-activity-indicators] [data-component="session-progress-indicator-v2"] [data-frame-content] {
+  display: none;
+}
+
+:root[data-static-activity-indicators] [data-component="session-progress-indicator-v2"] [data-reduced-motion] {
+  display: none;
+}
+
+:root[data-static-activity-indicators] [data-component="session-progress-indicator-v2"] [data-static-content] {
+  display: block;
 }

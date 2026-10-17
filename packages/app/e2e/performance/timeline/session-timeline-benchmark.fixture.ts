@@ -141,6 +141,9 @@ export async function setupTimelineBenchmark(
           shellToolPartsExpanded: true,
           showReasoningSummaries: true,
         },
+        appearance: {
+          staticActivityIndicators: process.env.STATIC_ACTIVITY_INDICATORS === "1",
+        },
       }),
     )
   })

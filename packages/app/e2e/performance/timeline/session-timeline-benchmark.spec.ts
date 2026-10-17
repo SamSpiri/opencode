@@ -172,6 +172,7 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
       eventBatch,
       reviewPane: options.reviewPane === true ? "open" : "closed",
       reviewDiffs: diffs?.length ?? 0,
+      staticActivityIndicators: process.env.STATIC_ACTIVITY_INDICATORS === "1",
     },
   }
 

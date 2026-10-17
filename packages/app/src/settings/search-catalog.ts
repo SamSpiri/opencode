@@ -87,6 +87,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "appearance", label: "settings.general.row.theme.title", target: "settings-theme" },
   {
     tab: "appearance",
+    label: "settings.appearance.row.staticActivityIndicators.title",
+    target: "settings-static-activity-indicators",
+    description: "settings.appearance.row.staticActivityIndicators.description",
+    keywords: "static activity indicator animation motion cpu busy",
+  },
+  {
+    tab: "appearance",
     label: "settings.general.row.uiFont.title",
     target: "settings-ui-font",
     keywords: "interface typeface",

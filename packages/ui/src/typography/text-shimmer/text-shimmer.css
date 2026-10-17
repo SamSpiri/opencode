@@ -118,3 +118,24 @@
     opacity: 1 !important;
   }
 }
+
+:root[data-static-activity-indicators] [data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-base"],
+:root[data-static-activity-indicators] [data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"] {
+  transition-duration: 0ms;
+}
+
+:root[data-static-activity-indicators] [data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-shimmer"] {
+  animation: none !important;
+  background-image: none;
+  color: inherit;
+  opacity: 0 !important;
+  -webkit-text-fill-color: currentColor;
+}
+
+:root[data-static-activity-indicators] [data-component="text-shimmer"]
+  [data-slot="text-shimmer-char-base"] {
+  opacity: 1 !important;
+}

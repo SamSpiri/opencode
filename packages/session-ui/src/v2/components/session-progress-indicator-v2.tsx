@@ -48,6 +48,13 @@ export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
         filter={`url(#${filter})`}
         clip-path={`url(#${clip})`}
       />
+      <path
+        data-static-content
+        d="M4 2h8M4 14h8M5 2c0 3 1 4 3 6-2 2-3 3-3 6h6c0-3-1-4-3-6 2-2 3-3 3-6H5Z"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
       <rect data-reduced-motion x={7} y={7} width={2} height={2} />
     </svg>
   )

@@ -700,6 +700,9 @@ export const dict = {
   "settings.appearance.row.tabs.description": "Choose how session tabs are arranged",
   "settings.appearance.row.tabs.horizontal": "Horizontal",
   "settings.appearance.row.tabs.vertical": "Vertical",
+  "settings.appearance.row.staticActivityIndicators.title": "Static activity indicators",
+  "settings.appearance.row.staticActivityIndicators.description":
+    "Replace animated activity indicators with static icons and text",
   "settings.notifications.description": "Choose when to receive notifications and hear sounds",
   "settings.shortcuts.description": "Customize shortcuts for common actions",
   "settings.servers.description": "Manage server connections",

@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
+import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -14,6 +15,7 @@ import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gu
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
+import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
@@ -123,6 +125,7 @@ function MessageTimelineView(
   },
 ) {
   const language = useLanguage()
+  const settings = useSettings()
   const server = useServer()
   const data = server.ctx.data
   const sdk = useWorkspaceLocation()
@@ -418,7 +421,15 @@ function MessageTimelineView(
             >
               <Show when={showWorking()}>
                 <div data-component="session-working" role="status">
-                  <TextShimmer text={language.t("session.timeline.working")} active />
+                  <Show
+                    when={settings.appearance.staticActivityIndicators()}
+                    fallback={<TextShimmer text={language.t("session.timeline.working")} active />}
+                  >
+                    <>
+                      <SessionProgressIndicatorV2 />
+                      <span class="sr-only">{language.t("session.timeline.working")}</span>
+                    </>
+                  </Show>
                 </div>
               </Show>
               <Show when={backgroundHintPresence.present()}>
