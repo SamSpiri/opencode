@@ -1,5 +1,6 @@
 import { Component, Show } from "solid-js"
 import { Select } from "@opencode/ui/select"
+import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -129,6 +130,18 @@ export const SettingsAppearance: Component = () => {
                 label={(option) => option.name}
                 onSelect={appearance.theme.select}
               />
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.appearance.row.staticActivityIndicators.title")}
+              description={language.t("settings.appearance.row.staticActivityIndicators.description")}
+            >
+              <div data-action="settings-static-activity-indicators">
+                <Switch
+                  checked={appearance.staticActivityIndicators()}
+                  onChange={appearance.setStaticActivityIndicators}
+                />
+              </div>
             </SettingsRow>
 
             <FontSetting kind="ui" fonts={appearance.fonts} />
