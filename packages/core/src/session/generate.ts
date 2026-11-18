@@ -75,7 +75,10 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       modelID: model.ref.id,
     })
     const response = yield* llm.generate(prepared.request, prepared.options)
-    yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
+    yield* Effect.logInfo("session generation usage diagnostic", {
+      sessionID: input.session.id,
+      usage: response.usage,
+    })
     return response.text
   }).pipe(instances.provide(input.session))
 })
