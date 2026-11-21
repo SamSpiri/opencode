@@ -996,6 +996,8 @@ export const dict = {
   "settings.appearance.row.reduceMotion.system": "System",
   "settings.appearance.row.reduceMotion.on": "On",
   "settings.appearance.row.reduceMotion.off": "Off",
+  "settings.appearance.row.staticActivityIndicators.title": "Static activity indicators",
+  "settings.appearance.row.staticActivityIndicators.description": "Replace animated activity indicators with static icons and text",
   "settings.notifications.description": "Choose when to receive notifications and hear sounds",
   "settings.shortcuts.description": "Customize shortcuts for common actions",
   "settings.servers.description": "Manage server connections",

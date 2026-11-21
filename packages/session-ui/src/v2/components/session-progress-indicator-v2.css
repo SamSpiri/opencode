@@ -3,3 +3,7 @@
   flex-shrink: 0;
   color: var(--v2-icon-icon-muted, #808080);
 }
+
+:root[data-static-activity-indicators] [data-component="session-progress-indicator-v2"][data-slot="spinner-dots"] svg {
+  animation: none !important;
+}

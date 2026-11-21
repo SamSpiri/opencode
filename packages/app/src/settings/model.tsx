@@ -150,6 +150,7 @@ const appearanceSchema = Persistence.struct({
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
+  staticActivityIndicators: Schema.Boolean,
 })
 
 const permissionsSchema = Persistence.struct({
@@ -311,7 +312,7 @@ export const defaultSettings: Settings = {
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system", staticActivityIndicators: false },
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -368,6 +369,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     })
 
     const reduceMotion = withFallback(() => store.appearance?.reduceMotion, defaultSettings.appearance.reduceMotion)
+    const staticActivityIndicators = withFallback(() => store.appearance?.staticActivityIndicators, false)
     const systemReducedMotion = createMediaQuery("(prefers-reduced-motion: reduce)")
 
     // Motion styles key off this attribute instead of the media query so the setting can override the system.
@@ -376,6 +378,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       const reduce = reduceMotion() === "system" ? systemReducedMotion() : reduceMotion() === "on"
       document.documentElement.dataset.motion = reduce ? "reduce" : "full"
     })
+    createEffect(() => document.documentElement.toggleAttribute("data-static-activity-indicators", staticActivityIndicators()))
 
     const timelineWidth = withFallback(() => store.general?.timelineWidth, defaultSettings.general.timelineWidth)
 
@@ -487,6 +490,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         reduceMotion,
         setReduceMotion(value: ReduceMotion) {
           setStore("appearance", "reduceMotion", value)
+        },
+        staticActivityIndicators,
+        setStaticActivityIndicators(value: boolean) {
+          setStore("appearance", "staticActivityIndicators", value)
         },
       },
       keybinds: {
